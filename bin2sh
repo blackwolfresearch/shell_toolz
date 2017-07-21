@@ -1,0 +1,62 @@
+#!/bin/sh
+# simple tool to transfer a binary file through a terminal session using 
+# a copy/paste into that terminal.  
+#
+# usage: bin2sh /path/to/binary
+#
+# if "xsel" tool is installed, this tool will send all commands necessary
+# to build binary directly to the clipboard for pasting.  otherwise, a
+# leafpad window will open with the file
+#
+# also features file integrity checking and disabling history temporarily
+# so as to not clutter the history with commands/evidence
+
+file=$1
+extra=$2
+
+if [ "$file" = "" ]; then
+	echo "Must specify file!"
+	exit
+fi
+
+if [ ! -f $file ]; then
+	echo "File not found!"
+	exit
+fi
+
+# xsel tool is preferred. if not on system:
+#
+# apt-get install xsel
+
+leafpad=$(which leafpad)
+xsel=$(which xsel)
+
+if [ "$leafpad" = "" ] && [ "$xsel" = "" ]; then
+	echo "Requires leafpad or xsel!"
+	exit
+fi
+
+tmpfile=$(mktemp)
+filebn=$(basename $file)
+md5=$(md5sum $file | awk '{ print $1 }')
+
+echo " HISTCONTROL=ignoreboth && set +o history" > $tmpfile
+echo "rm -f .t $filebn" >> $tmpfile
+cat $file | gzip -9 | base64 | sed -r "s/^(.*)$/echo \1\>\> \.t/g" >> $tmpfile
+echo "cat .t | base64 -d | gzip -d > $filebn" >> $tmpfile
+echo "rm -f .t" >> $tmpfile
+echo "echo && echo && [ \"\$(md5sum $filebn|awk '{ print \$1 }')\" = \"$md5\" ] && echo \"TRANSFER OK\" || echo \"CORRUPT FILE :(\"" >> $tmpfile
+echo " set -o history" >> $tmpfile
+
+if [ "$extra" != "" ]; then
+	echo "$extra" >> $tmpfile
+fi
+
+if [ "$xsel" = "" ]; then
+	$leafpad $tmpfile
+else
+	cat $tmpfile | $xsel -i -b 
+	echo "Payload is on clipboard!"
+fi
+
+rm -f $tmpfile

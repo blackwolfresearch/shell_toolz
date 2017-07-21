@@ -1,0 +1,36 @@
+#!/bin/sh
+# simple utility to compress and base64 a file in a terminal
+# afterwards, you can simply copy/paste the contents of your terminal
+# into the unshx program on a different system and extract the file
+#
+# example:
+#
+# [VICTIM SYSTEM SHELL] shx /var/log/messages
+# ...
+# select all/copy
+# ...
+#
+# [ATTACK SYSTEM SHELL] unshx
+#
+# ...
+# paste + ctrl-d
+# ...
+#
+# file should now be reconstructed and verified
+
+file=$1
+
+if [ "$file" = "" ]; then
+	echo "Must specify file!"
+	exit
+fi
+
+if [ ! -f $file ]; then
+	echo "File not found!"
+	exit
+fi
+
+echo "|----------------- XFER BEGIN -----------------|"
+echo "FILE=$(md5sum $file)"
+cat $file | gzip -9 | base64
+echo "|------------------ XFER END ------------------|"

@@ -1,0 +1,52 @@
+#!/bin/sh
+tmpfile=$(mktemp)
+
+echo "[+] Reading from clipboard..."
+
+xsel -o -b > $tmpfile
+
+echo "[+] Extracting..."
+
+# locate begin and end lines
+ln1=$(grep -n "XFER BEGIN" $tmpfile  | tail -1 | cut -f 1 -d ':')
+ln2=$(grep -n "XFER END" $tmpfile  | tail -1 | cut -f 1 -d ':')
+
+ln1=$((ln1+1))
+
+filespec=$(tail +$ln1 $tmpfile | head -1)
+
+echo "$filespec"  | egrep -q -E '^FILE=([0-9a-f]{32})([ ]+)?([^ ]*)$'
+
+if [ "$?" != "0" ]; then
+	#rm -f $tmpfile
+	echo $tmpfile
+	echo "[!] FILE METADATA INVALID" 
+	exit
+fi
+
+# check and parse file md5 checksum line
+
+orig_md5=$(echo "$filespec"  | sed -r 's/^FILE=([0-9a-f]{32})([ ]+)?([^ ]*)$/\1/g')
+file=$(echo "$filespec"  | sed -r 's/^FILE=([0-9a-f]{32})([ ]+)?([^ ]*)$/\3/g')
+file=$(basename $file)
+
+ln1=$((ln1+1))
+lc=$((ln2-ln1))
+
+if [ -f "$file" ]; then
+	rm -f $tmpfile
+	echo "FILE [$file] ALREADY EXISTS"
+	exit
+fi
+
+tail +$ln1 $tmpfile | head -$lc | base64 -d | gzip -d > $file
+
+file_md5=$(md5sum $file | awk '{ print $1 }')
+
+if [ "$orig_md5" = "$file_md5" ]; then
+	echo "[+] File [$file] verified"
+else
+	echo "[!] FILE [$file] INTEGRITY CHECK FAILED"
+fi
+
+rm -f $tmpfile
